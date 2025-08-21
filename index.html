@@ -1,0 +1,208 @@
+<!DOCTYPE html><html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Fugitive Hunt – Case #001: The Phantom Tourist</title>
+  <style>
+    :root { --bg:#0d1117; --panel:#161b22; --text:#e6edf3; --muted:#9da7b3; --accent:#58a6ff; --success:#3fb950; --danger:#f85149; }
+    *{box-sizing:border-box}
+    body{margin:0;font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,Arial;background:var(--bg);color:var(--text);display:grid;place-items:start center;min-height:100vh;padding:40px 16px}
+    .app{width:100%;max-width:900px}
+    .card{background:var(--panel);border-radius:16px;padding:24px;box-shadow:0 10px 30px rgba(0,0,0,.35)}
+    h1{margin:0 0 8px;color:var(--accent);font-size:clamp(20px,3vw,32px)}
+    p.lead{margin:0 0 16px;color:var(--muted)}
+    .progress{margin:18px 0;height:8px;border-radius:99px;background:#0b1016;overflow:hidden;border:1px solid #2b3138}
+    .progress>i{display:block;height:100%;width:0;background:linear-gradient(90deg,#2ea043,#58a6ff)}
+    .clue{line-height:1.6}
+    .image{margin:14px 0;border-radius:12px;overflow:hidden;border:1px solid #222}
+    .image img{display:block;width:100%;height:auto}
+    .field{display:flex;gap:8px;margin-top:12px}
+    input[type=text]{flex:1;padding:12px 14px;border-radius:10px;border:1px solid #2b3138;background:#0b1016;color:var(--text)}
+    button{padding:12px 16px;border-radius:10px;border:none;background:var(--accent);color:#06121f;font-weight:700;cursor:pointer}
+    button.secondary{background:#2b3138;color:var(--text)}
+    button:disabled{opacity:.6;cursor:not-allowed}
+    .row{display:flex;flex-wrap:wrap;gap:10px;margin-top:12px}
+    .pill{padding:6px 10px;background:#0b1016;border:1px solid #2b3138;border-radius:999px;font-size:12px;color:var(--muted)}
+    .feedback{min-height:22px;margin-top:10px}
+    .ok{color:var(--success);font-weight:700}
+    .err{color:var(--danger)}
+    details{margin-top:10px}
+    summary{cursor:pointer}
+    .footer{margin-top:20px;font-size:12px;color:var(--muted)}
+    a{color:var(--accent)}
+  </style>
+</head>
+<body>
+  <main class="app card">
+    <h1>Fugitive Hunt – Case #001</h1>
+    <p class="lead">Codename: <strong>The Phantom Tourist</strong>. Answer each prompt to unlock the next clue and pinpoint the hideout.</p><div class="progress"><i id="bar"></i></div>
+<section id="stage"></section>
+
+<div class="footer">
+  <div>Tip: Answers are case-insensitive. City/venue names and room numbers are expected. Progress saves locally.</div>
+  <div class="row">
+    <span class="pill" id="scorePill">Score: 0</span>
+    <span class="pill" id="hintPill">Hints used: 0</span>
+    <span class="pill" id="timerPill">Time: 00:00</span>
+    <button class="secondary" id="resetBtn" title="Reset progress">Reset</button>
+  </div>
+</div>
+
+  </main>  <script>
+    // ======= CONFIG =======
+    // Drop your tweet screenshot at /assets/phantom_tweet.jpg (or change the path below)
+    const CASE_ID = 'case001_phantom_harder_v1';
+
+    const CASE = {
+      title: 'The Phantom Tourist',
+      steps: [
+        {
+          id: 'clue1',
+          prompt: `We scraped a tweet from <em>@Phantom88</em>: “Finally landed. The nights here are longer than anywhere else.”\nThe attached window-view photo had filename <code>IMG_20230818_RO1.jpg</code>; EXIF timezone: <code>+3</code>. Identify the <strong>city</strong>.`,
+          image: 'assets/phantom_tweet.jpg',
+          accepts: ['bucharest','bucuresti'],
+          hint: 'Filename suggests Romania. The cylindrical glass tower is a local landmark.',
+          explanation: 'SkyTower / Globalworth Tower skyline points to Bucharest.'
+        },
+        {
+          id: 'clue2',
+          prompt: `His bio linked a dead page claiming: “The best espresso in town keeps me alive.” Earlier he mentioned \n<em>origami birds on the wall</em>. Name the <strong>café</strong>.`,
+          accepts: ['origo coffee','origo','origo cafe','origo café'],
+          hint: 'Search “Bucharest espresso origami birds”.',
+          explanation: 'Origo Coffee is known for origami decor and specialty espresso.'
+        },
+        {
+          id: 'clue3',
+          prompt: `The same orange hiking backpack appears on a rooftop in the Old Town. Identify the <strong>rooftop bar</strong>.`,
+          accepts: ['pura vida sky bar','pura vida','pura vida bar'],
+          hint: 'Popular Old Town rooftop tied to a hostel of the same name.',
+          explanation: 'Pura Vida Sky Bar overlooks the Old Town.'
+        },
+        {
+          id: 'clue4',
+          prompt: `A review mentions a property linked to the bar where the <em>balcony light in <strong>Room 7</strong> is broken</em>. Name the <strong>hostel</strong>.`,
+          accepts: ['pura vida hostel','pura vida'],
+          hint: 'Same brand as the sky bar.',
+          explanation: 'Bar and hostel share the Pura Vida name.'
+        },
+        {
+          id: 'clue5',
+          prompt: `Final check: Which <strong>room</strong> is the fugitive in?`,
+          accepts: ['room 7','7'],
+          hint: 'The review already leaked the room number.',
+          explanation: 'Room 7 is the target room.'
+        }
+      ]
+    };
+
+    // ======= UTIL =======
+    const $ = (q) => document.querySelector(q);
+    const stage = $('#stage');
+
+    function normalize(s){
+      return (s||'')
+        .toString()
+        .toLowerCase()
+        .trim()
+        .normalize('NFD').replace(/\p{Diacritic}/gu,'')
+        .replace(/[^a-z0-9\s]/g,'')
+        .replace(/\s+/g,' ');
+    }
+
+    const store = {
+      key: `fh_progress_${CASE_ID}`,
+      save: (data) => localStorage.setItem(store.key, JSON.stringify(data)),
+      load: () => { try { return JSON.parse(localStorage.getItem(store.key)) } catch { return null } },
+      clear: () => localStorage.removeItem(store.key)
+    };
+
+    // ======= STATE =======
+    let state = store.load() || { step: 0, score: 0, hints: 0, hintByStep: {} };
+
+    // Timer
+    const startTs = Date.now();
+    setInterval(() => {
+      const s = Math.floor((Date.now()-startTs)/1000);
+      const mm = String(Math.floor(s/60)).padStart(2,'0');
+      const ss = String(s%60).padStart(2,'0');
+      $('#timerPill').textContent = `Time: ${mm}:${ss}`;
+    }, 1000);
+
+    $('#resetBtn').addEventListener('click', () => {
+      if(confirm('Reset your progress?')){
+        state = { step: 0, score: 0, hints: 0, hintByStep: {} };
+        store.clear();
+        render();
+      }
+    });
+
+    function updateHUD(){
+      const pct = Math.round((state.step/CASE.steps.length)*100);
+      $('#bar').style.width = pct + '%';
+      $('#scorePill').textContent = `Score: ${state.score}`;
+      $('#hintPill').textContent = `Hints used: ${state.hints}`;
+    }
+
+    function render(){
+      updateHUD();
+      if(state.step >= CASE.steps.length){
+        stage.innerHTML = `
+          <div class="clue">
+            <h2 class="ok">Mission Complete ✅</h2>
+            <p>You tracked <strong>${CASE.title}</strong> to <em>Pura Vida Hostel, Room 7, Bucharest</em>. Authorities are moving in.</p>
+            <details><summary>Case breakdown</summary>
+              <ol>${CASE.steps.map(s=>`<li>${s.explanation||''}</li>`).join('')}</ol>
+            </details>
+          </div>`;
+        return;
+      }
+
+      const step = CASE.steps[state.step];
+      stage.innerHTML = `
+        <div class="clue">
+          <h2>Clue ${state.step+1} / ${CASE.steps.length}</h2>
+          <p>${step.prompt}</p>
+          ${step.image ? `<div class=\"image\"><img src=\"${step.image}\" alt=\"Clue image\"></div>` : ''}
+          <div class="field">
+            <input id="answer" type="text" placeholder="Type your answer" autocomplete="off" />
+            <button id="submitBtn">Submit</button>
+            <button class="secondary" id="hintBtn" title="Use a hint (−25 pts on this step)">Hint</button>
+          </div>
+          <div class="feedback" id="feedback"></div>
+        </div>`;
+
+      $('#submitBtn').addEventListener('click', check);
+      $('#answer').addEventListener('keydown', (e)=>{ if(e.key==='Enter') check(); });
+      $('#hintBtn').addEventListener('click', () => useHint(step));
+      $('#answer').focus();
+    }
+
+    function useHint(step){
+      if(state.hintByStep[state.step]) return; // only once per step
+      state.hintByStep[state.step] = true;
+      state.hints += 1;
+      $('#feedback').innerHTML = `<span class="pill">Hint:</span> ${step.hint}`;
+      store.save(state); updateHUD();
+    }
+
+    function check(){
+      const step = CASE.steps[state.step];
+      const val = normalize($('#answer').value);
+      const ok = step.accepts.some(a => normalize(a) === val);
+      if(ok){
+        const base = 100; const penalty = state.hintByStep[state.step] ? 25 : 0;
+        state.score += Math.max(0, base - penalty);
+        state.step += 1;
+        store.save(state);
+        $('#feedback').innerHTML = `<span class="ok">Correct.</span> ${step.explanation ? `<span class=\"pill\">Why</span> ${step.explanation}`:''}`;
+        setTimeout(render, 900);
+      } else {
+        $('#feedback').innerHTML = `<span class="err">❌ Wrong answer. Try again.</span>`;
+      }
+      updateHUD();
+    }
+
+    // Boot
+    render();
+  </script></body>
+</html>
