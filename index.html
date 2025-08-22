@@ -1,9 +1,11 @@
-<!DOCTYPE html><html lang="en">
+<!DOCTYPE html>
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Fugitive Hunt – Case #001: The Phantom Tourist</title>
   <style>
+    /* ===== Theme & layout ===== */
     :root { --bg:#0d1117; --panel:#161b22; --text:#e6edf3; --muted:#9da7b3; --accent:#58a6ff; --success:#3fb950; --danger:#f85149; }
     *{box-sizing:border-box}
     body{margin:0;font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,Arial;background:var(--bg);color:var(--text);display:grid;place-items:start center;min-height:100vh;padding:40px 16px}
@@ -11,62 +13,101 @@
     .card{background:var(--panel);border-radius:16px;padding:24px;box-shadow:0 10px 30px rgba(0,0,0,.35)}
     h1{margin:0 0 8px;color:var(--accent);font-size:clamp(20px,3vw,32px)}
     p.lead{margin:0 0 16px;color:var(--muted)}
+
+    /* Progress bar */
     .progress{margin:18px 0;height:8px;border-radius:99px;background:#0b1016;overflow:hidden;border:1px solid #2b3138}
     .progress>i{display:block;height:100%;width:0;background:linear-gradient(90deg,#2ea043,#58a6ff)}
+
+    /* Content blocks */
     .clue{line-height:1.6}
     .image{margin:14px 0;border-radius:12px;overflow:hidden;border:1px solid #222}
     .image img{display:block;width:100%;height:auto}
+
+    /* Input row */
     .field{display:flex;gap:8px;margin-top:12px}
     input[type=text]{flex:1;padding:12px 14px;border-radius:10px;border:1px solid #2b3138;background:#0b1016;color:var(--text)}
     button{padding:12px 16px;border-radius:10px;border:none;background:var(--accent);color:#06121f;font-weight:700;cursor:pointer}
     button.secondary{background:#2b3138;color:var(--text)}
     button:disabled{opacity:.6;cursor:not-allowed}
+
+    /* Badges / meta */
     .row{display:flex;flex-wrap:wrap;gap:10px;margin-top:12px}
     .pill{padding:6px 10px;background:#0b1016;border:1px solid #2b3138;border-radius:999px;font-size:12px;color:var(--muted)}
     .feedback{min-height:22px;margin-top:10px}
     .ok{color:var(--success);font-weight:700}
     .err{color:var(--danger)}
+
     details{margin-top:10px}
     summary{cursor:pointer}
     .footer{margin-top:20px;font-size:12px;color:var(--muted)}
     a{color:var(--accent)}
+
+    /* Intro panel styling */
+    .intro { line-height: 1.7 }
+    .grid { display:grid; gap:12px }
+    .cta { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:12px }
   </style>
 </head>
 <body>
   <main class="app card">
     <h1>Fugitive Hunt – Case #001</h1>
-    <p class="lead">Codename: <strong>The Phantom Tourist</strong>. Answer each prompt to unlock the next clue and pinpoint the hideout.</p><div class="progress"><i id="bar"></i></div>
-<section id="stage"></section>
+    <p class="lead">Codename: <strong>The Phantom Tourist</strong>. Follow the digital breadcrumbs and pinpoint the exact hideout.</p>
 
-<div class="footer">
-  <div>Tip: Answers are case-insensitive. City/venue names and room numbers are expected. Progress saves locally.</div>
-  <div class="row">
-    <span class="pill" id="scorePill">Score: 0</span>
-    <span class="pill" id="hintPill">Hints used: 0</span>
-    <span class="pill" id="timerPill">Time: 00:00</span>
-    <button class="secondary" id="resetBtn" title="Reset progress">Reset</button>
-  </div>
-</div>
+    <div class="progress"><i id="bar"></i></div>
 
-  </main>  <script>
-    // ======= CONFIG =======
-    // Drop your tweet screenshot at /assets/phantom_tweet.jpg (or change the path below)
-    const CASE_ID = 'case001_phantom_harder_v1';
+    <!--
+      The UI has two main surfaces:
+      1) #intro – the narrative prologue and mission briefing (shown until the player clicks Start Mission)
+      2) #stage – the step-by-step puzzle surface
+    -->
+    <section id="intro" class="intro"></section>
+    <section id="stage" aria-live="polite"></section>
+
+    <div class="footer">
+      <div>Tip: Answers are case-insensitive. City/venue names and room numbers are expected. Progress saves locally.</div>
+      <div class="row">
+        <span class="pill" id="scorePill">Score: 0</span>
+        <span class="pill" id="hintPill">Hints used: 0</span>
+        <span class="pill" id="timerPill">Time: 00:00</span>
+        <button class="secondary" id="resetBtn" title="Reset progress">Reset</button>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    /* =====================================================================
+       CONFIGURATION
+       ---------------------------------------------------------------------
+       - CASE_ID: used for localStorage namespacing
+       - CASE: narrative + puzzle steps (answers, hints, optional image)
+       ===================================================================== */
+
+    const CASE_ID = 'case001_phantom_harder_v2';
 
     const CASE = {
       title: 'The Phantom Tourist',
+      // Prologue text appears before the first puzzle. Keep it compact and flavorful.
+      prologue: `
+        <p><strong>Briefing:</strong> Interpol OSINT Division has flagged a smuggler who taunts investigators online under the alias <em>Phantom Tourist</em>.</p>
+        <p>He hops cities, drops artsy photos, and deletes posts before they’re archived. Lucky for you, some traces remain.</p>
+        <p class="pill">Codename: <strong>The Phantom Tourist</strong> — proceed with discretion.</p>
+      `,
       steps: [
         {
           id: 'clue1',
-          prompt: `We scraped a tweet from <em>@Phantom88</em>: “Finally landed. The nights here are longer than anywhere else.”\nThe attached window-view photo had filename <code>IMG_20230818_RO1.jpg</code>; EXIF timezone: <code>+3</code>. Identify the <strong>city</strong>.`,
-          image: 'assets/phantom_tweet.jpg',
+          // Prompt supports inline HTML. Keep it short but precise so the puzzle is clear.
+          prompt: `We scraped a tweet from <em>@Phantom88</em>: “Finally landed. The nights here are longer than anywhere else.”<br>
+                   The attached window-view photo had filename <code>IMG_20230818_RO1.jpg</code>; EXIF timezone: <code>+3</code>.<br>
+                   Identify the <strong>city</strong>.`,
+          image: 'assets/phantom_tweet.jpg', // Put your image at this path in the repo
           accepts: ['bucharest','bucuresti'],
           hint: 'Filename suggests Romania. The cylindrical glass tower is a local landmark.',
           explanation: 'SkyTower / Globalworth Tower skyline points to Bucharest.'
         },
         {
           id: 'clue2',
-          prompt: `His bio linked a dead page claiming: “The best espresso in town keeps me alive.” Earlier he mentioned \n<em>origami birds on the wall</em>. Name the <strong>café</strong>.`,
+          prompt: `His bio linked a dead page claiming: “The best espresso in town keeps me alive.” Earlier he mentioned
+                   <em>origami birds on the wall</em>. Name the <strong>café</strong>.`,
           accepts: ['origo coffee','origo','origo cafe','origo café'],
           hint: 'Search “Bucharest espresso origami birds”.',
           explanation: 'Origo Coffee is known for origami decor and specialty espresso.'
@@ -95,20 +136,49 @@
       ]
     };
 
-    // ======= UTIL =======
-    const $ = (q) => document.querySelector(q);
-    const stage = $('#stage');
+    /* =====================================================================
+       UTILITIES & STATE
+       ---------------------------------------------------------------------
+       - DOM helpers
+       - String normalization for forgiving answer checks
+       - Persistent state via localStorage
+       - Timer utilities (starts on "Start Mission")
+       ===================================================================== */
 
+    const $ = (q) => document.querySelector(q);
+
+    // Normalize answers without using regex escape sequences (to keep the file easy to paste/host)
     function normalize(s){
-      return (s||'')
-        .toString()
-        .toLowerCase()
-        .trim()
-        .normalize('NFD').replace(/\p{Diacritic}/gu,'')
-        .replace(/[^a-z0-9\s]/g,'')
-        .replace(/\s+/g,' ');
+      let t = (s || '').toString().toLowerCase().trim();
+      // Strip accents via NFD and manual filter of combining marks
+      t = t.normalize('NFD');
+      let out = '';
+      for (const ch of t) {
+        const code = ch.charCodeAt(0);
+        // Skip combining diacritical marks
+        if (code >= 0x0300 && code <= 0x036F) continue;
+        // Convert any whitespace to a simple space
+        if (ch <= ' ') { out += ' '; continue; }
+        // Keep a-z and 0-9, drop punctuation/symbols
+        if ((code >= 97 && code <= 122) || (code >= 48 && code <= 57) || ch === ' ') {
+          out += ch;
+        }
+      }
+      // Collapse multiple spaces without regex
+      out = out.trim();
+      let collapsed = '';
+      let prevSpace = false;
+      for (const ch of out) {
+        if (ch === ' ') {
+          if (!prevSpace) { collapsed += ' '; prevSpace = true; }
+        } else {
+          collapsed += ch; prevSpace = false;
+        }
+      }
+      return collapsed;
     }
 
+    // Local storage wrapper (namespaced by CASE_ID)
     const store = {
       key: `fh_progress_${CASE_ID}`,
       save: (data) => localStorage.setItem(store.key, JSON.stringify(data)),
@@ -116,93 +186,178 @@
       clear: () => localStorage.removeItem(store.key)
     };
 
-    // ======= STATE =======
-    let state = store.load() || { step: 0, score: 0, hints: 0, hintByStep: {} };
+    // Default state. "started" gates the intro vs. puzzle board.
+    let state = store.load() || { started:false, step: 0, score: 0, hints: 0, hintByStep: {}, startAt: null };
 
-    // Timer
-    const startTs = Date.now();
-    setInterval(() => {
-      const s = Math.floor((Date.now()-startTs)/1000);
+    // Timer management (we start counting when the player clicks Start Mission)
+    let timerId = null;
+    function startTimer(){
+      if(timerId) return; // don't double-start
+      state.startAt = state.startAt || Date.now();
+      timerId = setInterval(updateTimerPill, 1000);
+      updateTimerPill();
+    }
+    function stopTimer(){ if(timerId){ clearInterval(timerId); timerId = null; } }
+    function formatTime(ms){
+      const s = Math.max(0, Math.floor(ms/1000));
       const mm = String(Math.floor(s/60)).padStart(2,'0');
       const ss = String(s%60).padStart(2,'0');
-      $('#timerPill').textContent = `Time: ${mm}:${ss}`;
-    }, 1000);
+      return `${mm}:${ss}`;
+    }
+    function updateTimerPill(){
+      const elapsed = state.startAt ? (Date.now() - state.startAt) : 0;
+      document.getElementById('timerPill').textContent = `Time: ${formatTime(elapsed)}`;
+    }
 
-    $('#resetBtn').addEventListener('click', () => {
-      if(confirm('Reset your progress?')){
-        state = { step: 0, score: 0, hints: 0, hintByStep: {} };
-        store.clear();
-        render();
-      }
-    });
-
+    // HUD updates (progress, score, hints)
     function updateHUD(){
-      const pct = Math.round((state.step/CASE.steps.length)*100);
-      $('#bar').style.width = pct + '%';
-      $('#scorePill').textContent = `Score: ${state.score}`;
-      $('#hintPill').textContent = `Hints used: ${state.hints}`;
+      const pct = state.started ? Math.round((state.step/CASE.steps.length)*100) : 0;
+      document.getElementById('bar').style.width = pct + '%';
+      document.getElementById('scorePill').textContent = `Score: ${state.score}`;
+      document.getElementById('hintPill').textContent = `Hints used: ${state.hints}`;
+      updateTimerPill();
+    }
+
+    /* =====================================================================
+       RENDERING
+       ---------------------------------------------------------------------
+       - renderIntro(): narrative prologue and Start button
+       - render(): puzzle board for the current step or mission complete
+       ===================================================================== */
+
+    function renderIntro(){
+      // Show the opening story + objectives and a Start button
+      document.getElementById('intro').innerHTML = `
+        <div class="clue">
+          <h2>Case Briefing</h2>
+          ${CASE.prologue}
+          <div class="cta">
+            <button id="startBtn">Start Mission</button>
+            <span class="pill">Difficulty: Medium–High</span>
+          </div>
+        </div>`;
+
+      // Hide the puzzle stage until mission starts
+      document.getElementById('stage').innerHTML = '';
+
+      // Attach the Start button behavior
+      document.getElementById('startBtn').addEventListener('click', () => {
+        state.started = true;
+        state.startAt = Date.now();
+        store.save(state);
+        startTimer();
+        render();
+      });
+
+      // When landing on the page not started yet, ensure timer shows 00:00
+      stopTimer();
+      updateHUD();
     }
 
     function render(){
       updateHUD();
+
+      // If the player hasn't started, show the intro
+      if(!state.started){
+        renderIntro();
+        return;
+      }
+
+      // Once started, ensure the intro panel is cleared
+      document.getElementById('intro').innerHTML = '';
+      startTimer();
+
+      // Mission complete view
       if(state.step >= CASE.steps.length){
-        stage.innerHTML = `
+        const totalMs = state.startAt ? (Date.now() - state.startAt) : 0;
+        document.getElementById('stage').innerHTML = `
           <div class="clue">
             <h2 class="ok">Mission Complete ✅</h2>
             <p>You tracked <strong>${CASE.title}</strong> to <em>Pura Vida Hostel, Room 7, Bucharest</em>. Authorities are moving in.</p>
+            <p class="pill">Final Score: <strong>${state.score}</strong> · Time: <strong>${formatTime(totalMs)}</strong></p>
             <details><summary>Case breakdown</summary>
-              <ol>${CASE.steps.map(s=>`<li>${s.explanation||''}</li>`).join('')}</ol>
+              <ol>${CASE.steps.map(s=>`<li>${s.explanation || ''}</li>`).join('')}</ol>
             </details>
           </div>`;
         return;
       }
 
+      // Current step view
       const step = CASE.steps[state.step];
-      stage.innerHTML = `
+      document.getElementById('stage').innerHTML = `
         <div class="clue">
           <h2>Clue ${state.step+1} / ${CASE.steps.length}</h2>
           <p>${step.prompt}</p>
-          ${step.image ? `<div class=\"image\"><img src=\"${step.image}\" alt=\"Clue image\"></div>` : ''}
+          ${step.image ? `<div class="image"><img src="${step.image}" alt="Clue image"></div>` : ''}
           <div class="field">
             <input id="answer" type="text" placeholder="Type your answer" autocomplete="off" />
             <button id="submitBtn">Submit</button>
             <button class="secondary" id="hintBtn" title="Use a hint (−25 pts on this step)">Hint</button>
           </div>
-          <div class="feedback" id="feedback"></div>
+          <div class="feedback" id="feedback" aria-live="polite"></div>
         </div>`;
 
-      $('#submitBtn').addEventListener('click', check);
-      $('#answer').addEventListener('keydown', (e)=>{ if(e.key==='Enter') check(); });
-      $('#hintBtn').addEventListener('click', () => useHint(step));
-      $('#answer').focus();
+      // Wire up interactions for this step
+      document.getElementById('submitBtn').addEventListener('click', check);
+      document.getElementById('answer').addEventListener('keydown', (e)=>{ if(e.key==='Enter') check(); });
+      document.getElementById('hintBtn').addEventListener('click', () => useHint(step));
+      document.getElementById('answer').focus();
     }
 
+    /* =====================================================================
+       GAME LOGIC
+       ---------------------------------------------------------------------
+       - useHint(): reveals the hint once per step and applies score penalty
+       - check(): validates input against accepted answers, awards points, advances
+       ===================================================================== */
+
     function useHint(step){
-      if(state.hintByStep[state.step]) return; // only once per step
+      if(state.hintByStep[state.step]) return; // only one hint per step
       state.hintByStep[state.step] = true;
       state.hints += 1;
-      $('#feedback').innerHTML = `<span class="pill">Hint:</span> ${step.hint}`;
-      store.save(state); updateHUD();
+      document.getElementById('feedback').innerHTML = `<span class="pill">Hint:</span> ${step.hint}`;
+      store.save(state);
+      updateHUD();
     }
 
     function check(){
       const step = CASE.steps[state.step];
-      const val = normalize($('#answer').value);
+      const val = normalize(document.getElementById('answer').value);
       const ok = step.accepts.some(a => normalize(a) === val);
+
       if(ok){
+        // Scoring: 100 base points, -25 if hint used for this step (cannot go below 0)
         const base = 100; const penalty = state.hintByStep[state.step] ? 25 : 0;
         state.score += Math.max(0, base - penalty);
         state.step += 1;
         store.save(state);
-        $('#feedback').innerHTML = `<span class="ok">Correct.</span> ${step.explanation ? `<span class=\"pill\">Why</span> ${step.explanation}`:''}`;
-        setTimeout(render, 900);
+
+        document.getElementById('feedback').innerHTML = `<span class="ok">Correct.</span> ${step.explanation ? `<span class="pill">Why</span> ${step.explanation}` : ''}`;
+        setTimeout(render, 900); // brief pause for readability
       } else {
-        $('#feedback').innerHTML = `<span class="err">❌ Wrong answer. Try again.</span>`;
+        document.getElementById('feedback').innerHTML = `<span class="err">❌ Wrong answer. Try again.</span>`;
       }
+
       updateHUD();
     }
 
-    // Boot
-    render();
-  </script></body>
+    /* =====================================================================
+       BOOTSTRAP
+       - Attach reset behavior
+       - Initial render (intro or puzzle depending on saved state)
+       ===================================================================== */
+
+    document.getElementById('resetBtn').addEventListener('click', () => {
+      if(confirm('Reset your progress?')){
+        stopTimer();
+        state = { started:false, step: 0, score: 0, hints: 0, hintByStep: {}, startAt: null };
+        store.clear();
+        renderIntro();
+      }
+    });
+
+    // Initial mount
+    if(state.started){ startTimer(); render(); } else { renderIntro(); }
+  </script>
+</body>
 </html>
